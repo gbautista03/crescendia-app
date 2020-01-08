@@ -24,6 +24,11 @@ public class WebPageScraper {
 	
 	private static final String REVIEW_USER_IMG = "lemon--img__373c0__3GQUb photo-box-img__373c0__O0tbt";
 
+	/**
+	 * Scrape the web page of the given url
+	 * @param url
+	 * @return {@link com.crescendiaapp.dto.YelpReviewResponse}
+	 */
 	public static YelpReviewResponse scrapeWebPage(String url) {
 		YelpReviewResponse yelpReview = new YelpReviewResponse();
 		yelpReview.setReviews(new ArrayList<ReviewDto>());

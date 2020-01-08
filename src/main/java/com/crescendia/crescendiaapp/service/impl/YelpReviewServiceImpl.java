@@ -27,9 +27,6 @@ public class YelpReviewServiceImpl implements YelpReviewService {
 	@Autowired
 	private YelpRestProperties yelpRestProperties;
 	
-	/**
-	 * Fetch yelp reviews for the given business id
-	 */
 	public YelpReviewResponse fetchYelpReview(String id) {
 		UriComponents requestUri = UriComponentsBuilder.fromHttpUrl(yelpRestProperties.getReviewUrl()).buildAndExpand(id);
 		

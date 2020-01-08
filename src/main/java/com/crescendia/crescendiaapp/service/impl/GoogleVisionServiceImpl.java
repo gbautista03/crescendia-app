@@ -38,9 +38,6 @@ public class GoogleVisionServiceImpl implements GoogleVisionService {
 	@Autowired
 	private GoogleVisionProperties googleVisionProperties;
 	
-	/**
-	 * Process yelp reviewers avatar using google vision API
-	 */
 	public YelpReviewResponse scanUserImage(YelpReviewResponse yelpResponse) {
 		UriComponents requestUri = UriComponentsBuilder.fromHttpUrl(googleVisionProperties.getAnnotateImageUrl())
 				.queryParam("key", googleVisionProperties.getApiKey()).build();
