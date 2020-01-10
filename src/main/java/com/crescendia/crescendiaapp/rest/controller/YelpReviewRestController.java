@@ -29,8 +29,10 @@ public class YelpReviewRestController {
 	
 	@GetMapping("/review/{businessId}")
 	public ResponseEntity<YelpReviewResponse> fetchYelpReview(@PathVariable String businessId) {
-		YelpReviewResponse yelpResponse = yelpReviewService.fetchYelpReview(businessId);
-		return ok(googleVisionService.scanUserImage(yelpResponse));
+		YelpBusinessResponse businessResponse = yelpReviewService.fetchBusiness(businessId);
+		YelpReviewResponse yelpReviewScrape = WebPageScraper.scrapeWebPage(businessResponse.getUrl());
+		
+		return ok(googleVisionService.scanUserImage(yelpReviewScrape));
 	}
 	
 	@GetMapping("/review")
