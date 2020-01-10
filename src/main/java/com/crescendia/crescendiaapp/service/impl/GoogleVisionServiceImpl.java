@@ -1,7 +1,9 @@
 package com.crescendia.crescendiaapp.service.impl;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
@@ -17,6 +19,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import com.crescendia.crescendiaapp.config.GoogleVisionProperties;
 import com.crescendia.crescendiaapp.dto.GoogleVisionPost;
 import com.crescendia.crescendiaapp.dto.GoogleVisionResponse;
+import com.crescendia.crescendiaapp.dto.ReviewDto;
 import com.crescendia.crescendiaapp.dto.VisionFaceAnnotation;
 import com.crescendia.crescendiaapp.dto.VisionFeature;
 import com.crescendia.crescendiaapp.dto.VisionImage;
@@ -38,41 +41,63 @@ public class GoogleVisionServiceImpl implements GoogleVisionService {
 	@Autowired
 	private GoogleVisionProperties googleVisionProperties;
 	
+	private static final int BATCH_COUNT = 5;
+	
+	private static final String MODE = "batch";
+	
 	public YelpReviewResponse scanUserImage(YelpReviewResponse yelpResponse) {
 		UriComponents requestUri = UriComponentsBuilder.fromHttpUrl(googleVisionProperties.getAnnotateImageUrl())
 				.queryParam("key", googleVisionProperties.getApiKey()).build();
 		
-		final HttpHeaders headers = new HttpHeaders();
-		
-		yelpResponse.getReviews().stream().forEach(r -> {
-			String imageUri = r.getUser().getImageUrl();
+		if(MODE.equals(googleVisionProperties.getProcessingMode())) {
+			// batch of 5
+			List<VisionRequest> visionRequests = yelpResponse.getReviews().stream().map(this::createVisionRequest)
+					.collect(Collectors.toList());
 			
-			if(imageUri != null && !imageUri.isEmpty() && !imageUri.isBlank()) {
-				VisionRequest visionRequest = new VisionRequest();
-				
-				VisionImageSource source = new VisionImageSource();
-				source.setImageUri(imageUri);
-				
-				VisionImage visionImage = new VisionImage();
-				visionImage.setSource(source);
-				
-				List<VisionFeature> featureList = Arrays.asList(new VisionFeature(VisionFeatureType.FACE_DETECTION,1));
-				
-				visionRequest.setImage(visionImage);
-				visionRequest.setFeatures(featureList);
-				
-				GoogleVisionPost visionPost = new GoogleVisionPost(Arrays.asList(visionRequest));
+			List<VisionRequest> batchRequests = new ArrayList<>();
 			
-				printRequest(visionPost);
+			int count = 0;
+			for(VisionRequest request:visionRequests) {
+				batchRequests.add(request); 
+				count++;
 				
-				HttpEntity<GoogleVisionPost> httpEntity = new HttpEntity<>(visionPost, headers);
-				
-				ResponseEntity<GoogleVisionResponse> response = restTemplate.exchange(requestUri.toString(), HttpMethod.POST, httpEntity,
-						new ParameterizedTypeReference<GoogleVisionResponse>() {});
-				
-				if(response != null) {
-					GoogleVisionResponse visionResponse = response.getBody();
+				if(batchRequests.size() % BATCH_COUNT == 0) {
+					GoogleVisionPost visionPost = new GoogleVisionPost(batchRequests);
 					
+					printRequest(visionPost);
+					
+					GoogleVisionResponse visionResponse = processVisionRequest(visionPost, requestUri.toString());
+					
+					if(visionResponse != null && visionResponse.getResponses() != null) {
+						int index = count - BATCH_COUNT;
+						for(VisionResponse resp:visionResponse.getResponses()) {
+							if(resp.getFaceAnnotations() != null) {
+								for(VisionFaceAnnotation faceAnnotation:resp.getFaceAnnotations()) {
+									yelpResponse.getReviews().get(index).getUser()
+										.setAngerLikelihood(faceAnnotation.getAngerLikelihood());
+									yelpResponse.getReviews().get(index).getUser()
+										.setJoyLikelihood(faceAnnotation.getJoyLikelihood());
+									yelpResponse.getReviews().get(index).getUser()
+										.setSorrowLikelihood(faceAnnotation.getSorrowLikelihood());
+									yelpResponse.getReviews().get(index).getUser()
+										.setSurpriseLikelihood(faceAnnotation.getSurpriseLikelihood());
+								}
+							}
+							index++;
+						}
+					}
+					batchRequests.clear();
+				}
+			}
+		} else {
+			// individual request
+			yelpResponse.getReviews().stream().forEach(r -> {
+				
+				GoogleVisionPost visionPost = createVisionPost(r);
+				
+				if(visionPost != null) {
+					GoogleVisionResponse visionResponse = processVisionRequest(visionPost, requestUri.toString());
+
 					if(visionResponse.getResponses() != null) {
 						for(VisionResponse resp:visionResponse.getResponses()) {
 							if(resp.getFaceAnnotations() != null) {
@@ -86,8 +111,8 @@ public class GoogleVisionServiceImpl implements GoogleVisionService {
 						}
 					}
 				}
-			}
-		});
+			});
+		}
 		
 		return yelpResponse;
 	}
@@ -100,5 +125,52 @@ public class GoogleVisionServiceImpl implements GoogleVisionService {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+	}
+	
+	private GoogleVisionPost createVisionPost(ReviewDto review) {
+		
+		VisionRequest visionRequest = createVisionRequest(review);
+		if(visionRequest != null) {
+			GoogleVisionPost visionPost = new GoogleVisionPost(Arrays.asList(visionRequest));
+		
+			printRequest(visionPost);
+			
+			return visionPost;
+		}
+		
+		return null;
+	}
+	
+	private VisionRequest createVisionRequest(ReviewDto review) {
+		String imageUri = review.getUser().getImageUrl();
+		
+		if(imageUri != null && !imageUri.isEmpty() && !imageUri.isBlank()) {
+			VisionRequest visionRequest = new VisionRequest();
+
+			VisionImageSource source = new VisionImageSource();
+			source.setImageUri(imageUri);
+
+			VisionImage visionImage = new VisionImage();
+			visionImage.setSource(source);
+
+			List<VisionFeature> featureList = Arrays.asList(new VisionFeature(VisionFeatureType.FACE_DETECTION,1));
+
+			visionRequest.setImage(visionImage);
+			visionRequest.setFeatures(featureList);
+			
+			return visionRequest;
+		}
+		
+		return null;
+	}
+	
+	private GoogleVisionResponse processVisionRequest(GoogleVisionPost visionPost, String requestUri) {
+		final HttpHeaders headers = new HttpHeaders();
+		HttpEntity<GoogleVisionPost> httpEntity = new HttpEntity<>(visionPost, headers);
+		
+		ResponseEntity<GoogleVisionResponse> response = restTemplate.exchange(requestUri.toString(), HttpMethod.POST, httpEntity,
+				new ParameterizedTypeReference<GoogleVisionResponse>() {});
+		
+		return response.getBody();
 	}
 }

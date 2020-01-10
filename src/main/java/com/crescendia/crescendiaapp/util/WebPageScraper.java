@@ -51,7 +51,10 @@ public class WebPageScraper {
 				String userName = userNameElements.get(0).text();
 				
 				Elements userImgUrl = reviewElement.getElementsByClass(REVIEW_USER_IMG).select("img[loading][srcSet]");
-				String imageUrl = userImgUrl.get(0).attr("src");
+				String srcSet = userImgUrl.attr("srcSet");
+				String[] arrSrc = srcSet.split(",");
+				String src = arrSrc.length > 2 ? arrSrc[1].split(" ")[0] : arrSrc[0].split(" ")[0];
+				String imageUrl = (src.isEmpty() || src.isBlank()) ? userImgUrl.get(0).attr("src") : src;
 				
 				Elements reviewRatingElements = reviewElement.select("div[aria-label][role=img]");
 				String rating = Character.toString(reviewRatingElements.get(0).attr("aria-label").charAt(0));

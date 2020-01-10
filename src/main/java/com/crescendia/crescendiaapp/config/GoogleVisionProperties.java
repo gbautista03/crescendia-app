@@ -13,4 +13,6 @@ public class GoogleVisionProperties {
 	private String annotateImageUrl;
 	
 	private String apiKey;
+	
+	private String processingMode;
 }
